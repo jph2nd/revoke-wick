@@ -17,7 +17,6 @@ import {
   padAddress,
   padUint,
   decodeUint,
-  currentRpc,
 } from './rpc.js';
 import {
   scanApprovals,
@@ -844,7 +843,6 @@ $('explorer-link').href = feeContractReady
   ? `${CHAIN.explorer}/address/${FEE_CONTRACT}`
   : CHAIN.explorer;
 
-$('rpc-note').textContent = `via ${new URL(currentRpc()).host}`;
 
 loadFees().then(refreshBurnStats);
 
