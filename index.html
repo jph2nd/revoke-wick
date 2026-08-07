@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Revoke WICK — PulseChain Token Approval Checker</title>
+<meta name="description" content="Find and revoke risky token approvals on PulseChain. Half of every fee buys and burns WICK." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕯️</text></svg>" />
+<link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="./">
+      <span class="brand-mark">🕯️</span>
+      <span class="brand-text">revoke<span class="dot">.</span>wick</span>
+    </a>
+    <div class="topbar-right">
+      <span id="net-pill" class="pill hidden"></span>
+      <button id="connect" class="btn btn-primary">Connect Wallet</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ---------------------------------------------------------------- hero -->
+  <section id="hero" class="hero">
+    <h1>Revoke token approvals on PulseChain</h1>
+    <p class="lede">
+      Every token you have ever traded left a standing permission behind. If that
+      contract is ever drained or was malicious from the start, those permissions
+      are how your tokens leave your wallet. Check yours, and close the ones you
+      no longer use.
+    </p>
+    <div class="hero-actions">
+      <button id="connect-hero" class="btn btn-primary btn-lg">Connect Wallet</button>
+      <form id="lookup-form" class="lookup">
+        <input id="lookup-input" type="text" spellcheck="false" autocomplete="off"
+               placeholder="…or paste any 0x address to check it read-only" />
+        <button class="btn btn-ghost" type="submit">Check</button>
+      </form>
+    </div>
+
+    <ul class="assurances">
+      <li><strong>Non-custodial.</strong> Revokes are sent from your wallet, straight to the token contract.</li>
+      <li><strong>No backend.</strong> Static files talking to public PulseChain RPCs. Nothing is logged.</li>
+      <li><strong>Half of every fee burns WICK.</strong> Bought on-market, sent to <code>0x…0369</code>, forever.</li>
+    </ul>
+  </section>
+
+  <!-- ------------------------------------------------------------- scanning -->
+  <section id="scanning" class="panel hidden">
+    <div class="scan-head">
+      <div class="spinner" aria-hidden="true"></div>
+      <div>
+        <h2 id="scan-title">Scanning approvals…</h2>
+        <p id="scan-detail" class="muted small">Reading approval history from PulseChain</p>
+      </div>
+    </div>
+    <div class="progress"><div id="scan-bar" class="progress-fill"></div></div>
+  </section>
+
+  <!-- ------------------------------------------------------------- results -->
+  <section id="results" class="hidden">
+
+    <div class="results-head">
+      <div>
+        <h2 id="results-title">Approvals</h2>
+        <p id="results-sub" class="muted small"></p>
+      </div>
+      <div class="results-actions">
+        <label class="check">
+          <input type="checkbox" id="only-risky" checked />
+          <span>Only unlimited &amp; blanket</span>
+        </label>
+        <button id="rescan" class="btn btn-ghost">Rescan</button>
+      </div>
+    </div>
+
+    <div id="batch-bar" class="batch-bar hidden">
+      <span id="batch-count">0 selected</span>
+      <span class="batch-fee muted small" id="batch-fee-note"></span>
+      <button id="revoke-batch" class="btn btn-primary">Revoke selected</button>
+    </div>
+
+    <div class="table-scroll">
+      <table id="approvals" class="approvals">
+        <thead>
+          <tr>
+            <th class="col-check"><input type="checkbox" id="select-all" /></th>
+            <th>Token</th>
+            <th>Approved amount</th>
+            <th>At risk</th>
+            <th>Spender</th>
+            <th class="col-action"></th>
+          </tr>
+        </thead>
+        <tbody id="approvals-body"></tbody>
+      </table>
+    </div>
+
+    <div id="empty" class="empty hidden">
+      <p class="big">✅ No active approvals found</p>
+      <p class="muted">This wallet has nothing outstanding. Nothing to revoke.</p>
+    </div>
+  </section>
+
+  <!-- ----------------------------------------------------------- burn stats -->
+  <section id="burn-panel" class="panel burn">
+    <div class="burn-head">
+      <h2>WICK buy &amp; burn</h2>
+      <a class="muted small" id="contract-link" target="_blank" rel="noopener">fee contract</a>
+    </div>
+    <p class="muted small">
+      Half of every fee accumulates here, then anyone can trigger the swap. The
+      WICK is bought on PulseX and delivered straight to the burn address — it
+      never passes through the operator's hands, and the contract has no
+      function that can withdraw it.
+    </p>
+    <div class="stat-row">
+      <div class="stat"><div class="stat-k" id="stat-pending">—</div><div class="stat-l">PLS waiting to burn</div></div>
+      <div class="stat"><div class="stat-k" id="stat-wick">—</div><div class="stat-l">WICK burned to date</div></div>
+      <div class="stat"><div class="stat-k" id="stat-revokes">—</div><div class="stat-l">Approvals revoked</div></div>
+    </div>
+    <div class="burn-actions">
+      <button id="do-burn" class="btn btn-burn" disabled>Trigger burn</button>
+      <span id="burn-note" class="muted small"></span>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <p class="muted small">
+      Revoking is free on-chain — you can always call <code>approve(spender, 0)</code>
+      yourself. The fee buys you the scan, the risk assessment and one-click
+      revoking, and it burns WICK.
+    </p>
+    <p class="muted small">
+      <a href="https://scan.pulsechain.com" target="_blank" rel="noopener">PulseChain Explorer</a>
+      · <span id="rpc-note"></span>
+    </p>
+  </footer>
+</main>
+
+<!-- ------------------------------------------------------------------ modal -->
+<div id="modal" class="modal hidden">
+  <div class="modal-card">
+    <h3 id="modal-title">Confirm</h3>
+    <div id="modal-body"></div>
+    <div class="modal-actions">
+      <button id="modal-cancel" class="btn btn-ghost">Cancel</button>
+      <button id="modal-ok" class="btn btn-primary">Continue</button>
+    </div>
+  </div>
+</div>
+
+<div id="toasts" class="toasts"></div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
