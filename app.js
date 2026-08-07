@@ -172,15 +172,26 @@ async function connect() {
     return;
   }
 
-  state.provider.on?.('accountsChanged', (accs) => {
-    state.account = accs?.[0]?.toLowerCase() ?? null;
-    if (state.account) startScan(state.account, false);
-    else location.reload();
-  });
-  state.provider.on?.('chainChanged', (id) => {
-    state.chainId = id;
-    renderNetwork();
-  });
+  // Bind provider events exactly once. connect() can run several times (retry,
+  // change-wallet), and re-binding would fire every handler N times.
+  if (!state.listenersBound) {
+    state.listenersBound = true;
+    state.provider.on?.('accountsChanged', (accs) => {
+      const next = accs?.[0]?.toLowerCase() ?? null;
+      if (next) {
+        state.account = next;
+        renderNetwork();
+        startScan(next, false);
+      } else {
+        // The wallet revoked access from its own UI.
+        resetToDisconnected();
+      }
+    });
+    state.provider.on?.('chainChanged', (id) => {
+      state.chainId = id;
+      renderNetwork();
+    });
+  }
 
   renderNetwork();
   if (!onRightChain()) {
@@ -188,6 +199,100 @@ async function connect() {
     if (!ok) return;
   }
   startScan(state.account, false);
+}
+
+/**
+ * Ask the wallet to re-present its account picker.
+ *
+ * There is no EIP-1193 "switch account" call. Re-requesting the eth_accounts
+ * permission is what makes MetaMask (and most forks) show the picker again;
+ * plain eth_requestAccounts silently returns the already-approved account.
+ */
+async function switchWallet() {
+  closeWalletMenu();
+  try {
+    await state.provider.request({
+      method: 'wallet_requestPermissions',
+      params: [{ eth_accounts: {} }],
+    });
+    const accounts = await state.provider.request({ method: 'eth_accounts' });
+    if (!accounts?.length) return resetToDisconnected();
+    state.account = accounts[0].toLowerCase();
+    renderNetwork();
+    startScan(state.account, false);
+  } catch (e) {
+    // Wallets that do not implement wallet_requestPermissions fall back to a
+    // plain connect, which at least re-prompts on some of them.
+    if (e?.code === -32601) return connect();
+    toast(walletError(e), 'err');
+  }
+}
+
+/**
+ * Disconnect. EIP-1193 has no disconnect method — a dApp cannot force a wallet
+ * to forget it. wallet_revokePermissions does it on MetaMask; everywhere else
+ * we clear our own state, which is all a site can honestly do.
+ */
+async function disconnectWallet() {
+  closeWalletMenu();
+  try {
+    await state.provider?.request({
+      method: 'wallet_revokePermissions',
+      params: [{ eth_accounts: {} }],
+    });
+  } catch {
+    /* unsupported on this wallet — local reset below is the fallback */
+  }
+  resetToDisconnected();
+  toast('Wallet disconnected.');
+}
+
+/** Return the page to its signed-out state without reloading. */
+function resetToDisconnected() {
+  state.account = null;
+  state.chainId = null;
+  state.viewing = null;
+  state.readOnly = false;
+  state.approvals = [];
+  state.selected.clear();
+
+  closeWalletMenu();
+  $('connect').textContent = 'Connect Wallet';
+  $('net-pill').classList.add('hidden');
+  $('net-pill').onclick = null;
+  $('results').classList.add('hidden');
+  $('scanning').classList.add('hidden');
+  $('hero').classList.remove('hidden');
+  $('approvals-body').innerHTML = '';
+  renderBatchBar();
+}
+
+function openWalletMenu() {
+  $('wallet-menu').classList.remove('hidden');
+  $('connect').setAttribute('aria-expanded', 'true');
+  // Close on the next outside click.
+  setTimeout(() => document.addEventListener('click', outsideWalletClick), 0);
+}
+
+function closeWalletMenu() {
+  $('wallet-menu').classList.add('hidden');
+  $('connect').setAttribute('aria-expanded', 'false');
+  document.removeEventListener('click', outsideWalletClick);
+}
+
+function outsideWalletClick(e) {
+  if (!e.target.closest('.wallet-wrap')) closeWalletMenu();
+}
+
+/** Connect when signed out; offer change/disconnect when signed in. */
+function onConnectClick() {
+  if (state.account) {
+    $('wallet-menu').classList.contains('hidden')
+      ? openWalletMenu()
+      : closeWalletMenu();
+  } else {
+    connect();
+  }
 }
 
 function onRightChain() {
@@ -264,7 +369,8 @@ function renderNetwork() {
     pill.className = 'pill warn';
     pill.onclick = ensureChain;
   }
-  $('connect').textContent = shortAddr(state.account);
+  // Caret signals the button is now a menu, not a connect action.
+  $('connect').textContent = `${shortAddr(state.account)} ▾`;
 }
 
 // ------------------------------------------------------------------ scanning
@@ -698,8 +804,10 @@ async function loadFees() {
 
 // ---------------------------------------------------------------------- init
 
-$('connect').onclick = connect;
+$('connect').onclick = onConnectClick;
 $('connect-hero').onclick = connect;
+$('wm-switch').onclick = switchWallet;
+$('wm-disconnect').onclick = disconnectWallet;
 $('rescan').onclick = () => state.viewing && startScan(state.viewing, state.readOnly);
 $('only-risky').onchange = renderRows;
 $('revoke-batch').onclick = revokeBatch;

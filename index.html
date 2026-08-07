@@ -19,7 +19,13 @@
     </a>
     <div class="topbar-right">
       <span id="net-pill" class="pill hidden"></span>
-      <button id="connect" class="btn btn-primary">Connect Wallet</button>
+      <div class="wallet-wrap">
+        <button id="connect" class="btn btn-primary" aria-haspopup="menu" aria-expanded="false">Connect Wallet</button>
+        <div id="wallet-menu" class="wallet-menu hidden" role="menu">
+          <button id="wm-switch" role="menuitem">Change wallet</button>
+          <button id="wm-disconnect" role="menuitem" class="danger">Disconnect</button>
+        </div>
+      </div>
     </div>
   </div>
 </header>
@@ -136,7 +142,7 @@
 
   <footer class="footer">
     <p class="muted small">
-      <a id="explorer-link" target="_blank" rel="noopener">Fee contract on PulseChain</a>
+      <a id="explorer-link" target="_blank" rel="noopener">Contract on PulseChain</a>
       · <a href="https://github.com/jph2nd/revoke-wick" target="_blank" rel="noopener">Source on GitHub</a>
       · <span id="rpc-note"></span>
     </p>

@@ -76,6 +76,23 @@ a:hover { text-decoration: underline; }
 .brand .dot { color: var(--green); }
 .topbar-right { display: flex; align-items: center; gap: 0.7rem; }
 
+.wallet-wrap { position: relative; }
+.wallet-menu {
+  position: absolute; right: 0; top: calc(100% + 0.45rem);
+  min-width: 180px; z-index: 50;
+  background: var(--panel); border: 1px solid var(--line-2);
+  border-radius: var(--radius-sm); padding: 0.3rem;
+  box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.7);
+  display: flex; flex-direction: column;
+}
+.wallet-menu button {
+  font: inherit; font-size: 0.88rem; text-align: left;
+  padding: 0.55rem 0.7rem; border: none; border-radius: 6px;
+  background: transparent; color: var(--text); cursor: pointer;
+}
+.wallet-menu button:hover { background: var(--panel-2); }
+.wallet-menu button.danger { color: var(--red); }
+
 .pill {
   font-size: 0.78rem; padding: 0.28rem 0.6rem;
   border: 1px solid var(--line-2); border-radius: 999px;
