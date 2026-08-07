@@ -892,7 +892,10 @@ async function triggerBurn() {
 
 /** Read the real on-chain fee amounts so the UI never lies about the price. */
 async function loadFees() {
-  if (!feeContractReady) return;
+  if (!feeContractReady) {
+    $('fee-line').classList.add('hidden');
+    return;
+  }
   try {
     const [s, b] = await rpcBatch([
       ethCall(FEE_CONTRACT, SEL.singleFee),
@@ -903,6 +906,17 @@ async function loadFees() {
   } catch {
     /* keep the compiled-in defaults */
   }
+  renderFees();
+}
+
+/**
+ * Show the price from the contract's own values, not the hardcoded fallback,
+ * so the headline figure can never advertise one price while the contract
+ * charges another.
+ */
+function renderFees() {
+  $('fee-single').textContent = fmtPls(state.fees.single);
+  $('fee-batch').textContent = fmtPls(state.fees.batch);
 }
 
 // ---------------------------------------------------------------------- init

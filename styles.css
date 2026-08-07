@@ -165,8 +165,25 @@ a:hover { text-decoration: underline; }
 .lookup input:focus { outline: none; border-color: var(--green-dim); }
 .lookup input::placeholder { color: var(--dim); font-family: var(--sans); }
 
+/* Price, stated up front rather than first revealed in a confirm dialog. */
+.fee-line {
+  display: flex; flex-wrap: wrap; align-items: center;
+  gap: 0.5rem 0.7rem; margin: 1.5rem 0 0;
+  font-size: 0.88rem; color: var(--muted);
+}
+.fee-chip {
+  display: inline-flex; align-items: baseline; gap: 0.4rem;
+  padding: 0.32rem 0.7rem; border-radius: 999px;
+  border: 1px solid var(--line-2); background: var(--panel);
+}
+.fee-chip strong {
+  color: var(--green); font-weight: 650;
+  font-family: var(--mono); font-size: 0.9rem; letter-spacing: -0.01em;
+}
+.fee-tail { color: var(--dim); }
+
 .assurances {
-  list-style: none; padding: 0; margin: 2.5rem 0 0;
+  list-style: none; padding: 0; margin: 2rem 0 0;
   display: grid; gap: 0.65rem;
 }
 .assurances li {
