@@ -933,6 +933,13 @@ $('explorer-link').href = feeContractReady
   ? `${CHAIN.explorer}/address/${FEE_CONTRACT}`
   : CHAIN.explorer;
 
+// "Contract is verified" — deep-link to the verified source tab, again built
+// from config so it can never point at a different contract than the one the
+// site charges fees to.
+$('verified-link').href = feeContractReady
+  ? `${CHAIN.explorer}/address/${FEE_CONTRACT}#code`
+  : CHAIN.explorer;
+
 
 loadFees().then(refreshBurnStats);
 
