@@ -827,25 +827,39 @@ async function refreshBurnStats() {
       ethCall(FEE_CONTRACT, SEL.previewBurn),
       ethCall(FEE_CONTRACT, SEL.burnReadyIn),
     ]);
+    let pending = 0n;
     if (statsRaw) {
       const w = (i) => decodeUint('0x' + statsRaw.slice(2).slice(i * 64, i * 64 + 64));
-      const pending = w(0);
+      pending = w(0);
       const wickBurned = w(3);
       const singles = w(4);
       const batches = w(5);
-      $('stat-pending').textContent = fmtUnits(pending, 18, 0);
       $('stat-wick').textContent = fmtUnits(wickBurned, 18, 2);
       $('stat-revokes').textContent = (singles + batches).toLocaleString();
       $('do-burn').disabled = pending === 0n;
       $('burn-note').textContent =
         pending === 0n ? 'Nothing pending yet.' : 'Anyone can trigger this.';
     }
+
+    // The pot holds PLS, not WICK — the WICK does not exist until burn() runs.
+    // previewBurn() quotes what that PLS currently buys, so the headline figure
+    // can be denominated in WICK honestly. Never label a PLS balance as WICK.
     if (previewRaw && previewRaw !== '0x') {
       const w = (i) => decodeUint('0x' + previewRaw.slice(2).slice(i * 64, i * 64 + 64));
+      const plsIn = w(0);
       const expected = w(1);
+      $('stat-pending').textContent = fmtUnits(expected, 18, 2);
       if (expected > 0n) {
-        $('burn-note').textContent = `≈ ${fmtUnits(expected, 18, 2)} WICK will be burned.`;
+        $('burn-note').textContent =
+          `${fmtUnits(plsIn, 18, 0)} PLS in the pot — anyone can trigger the burn.`;
       }
+    } else if (pending === 0n) {
+      $('stat-pending').textContent = '0';
+    } else {
+      // Pot has PLS but the quote failed (thin/dead route) — do not invent a number.
+      $('stat-pending').textContent = '—';
+      $('burn-note').textContent =
+        `${fmtUnits(pending, 18, 0)} PLS pending — no route quote available.`;
     }
     // The contract enforces a cooldown between burns; surface it instead of
     // letting the user submit a transaction that is guaranteed to revert.
