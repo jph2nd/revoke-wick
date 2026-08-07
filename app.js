@@ -401,9 +401,22 @@ function renderRows() {
     const bal = a.meta?.balance ?? 0n;
     if (a.kind === KIND.ERC20) {
       const atRisk = a.allowance < bal ? a.allowance : bal;
-      tdRisk.innerHTML = atRisk > 0n
-        ? `<span class="risk some">${fmtUnits(atRisk, a.meta?.decimals ?? 18)} ${a.meta?.symbol ?? ''}</span>`
-        : '<span class="risk none">nothing held</span>';
+      // NEVER interpolate token metadata into innerHTML. `symbol` is whatever
+      // an arbitrary token contract chose to return, so it is attacker
+      // controlled: a token whose symbol() is `<img src=x onerror=...>` would
+      // otherwise inject markup into a page that is connected to the user's
+      // wallet. Build the node and assign textContent instead. The CSP blocks
+      // inline handlers too, but the escaping must not depend on the CSP.
+      const span = document.createElement('span');
+      if (atRisk > 0n) {
+        span.className = 'risk some';
+        span.textContent =
+          `${fmtUnits(atRisk, a.meta?.decimals ?? 18)} ${a.meta?.symbol ?? ''}`.trim();
+      } else {
+        span.className = 'risk none';
+        span.textContent = 'nothing held';
+      }
+      tdRisk.appendChild(span);
     } else {
       tdRisk.innerHTML = '<span class="risk some">all holdings</span>';
     }
