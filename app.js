@@ -55,7 +55,11 @@ function spenderLabel(a) {
 }
 
 function fmtUnits(value, decimals, maxFrac = 4) {
-  const d = BigInt(decimals ?? 18);
+  // Defence in depth: the scanner already clamps decimals, but this must never
+  // throw on hostile input either. `10n ** 2n**256n` raises RangeError and
+  // would abort rendering of every row, not just the offending one.
+  const n = decimals == null ? 18 : Number(decimals);
+  const d = BigInt(Number.isInteger(n) && n >= 0 && n <= 36 ? n : 18);
   const base = 10n ** d;
   const whole = value / base;
   const frac = value % base;

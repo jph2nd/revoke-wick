@@ -186,11 +186,10 @@ export async function resolveActive(owner, pairs, onProgress) {
   const meta = new Map();
   tokens.forEach((t, i) => {
     const base = i * 4;
-    const decRaw = metaRaw[base + 2];
     meta.set(t, {
       symbol: decodeString(metaRaw[base]) || '???',
       name: decodeString(metaRaw[base + 1]) || 'Unknown token',
-      decimals: decRaw == null ? 18 : Number(decodeUint(decRaw)),
+      decimals: safeDecimals(metaRaw[base + 2]),
       balance: metaRaw[base + 3] == null ? 0n : decodeUint(metaRaw[base + 3]),
     });
   });
@@ -215,6 +214,23 @@ export async function scanApprovals(owner, onProgress) {
     return d !== 0 ? d : b.lastBlock - a.lastBlock;
   });
   return { latest, scanned: pairs.length, approvals: active };
+}
+
+/**
+ * Token metadata is attacker-controlled, and a token does not have to be one
+ * the user chose: ANY contract can emit `Approval(victim, spender, x)` naming a
+ * victim as owner, and discovery filters on exactly that topic — so a hostile
+ * token lands in a stranger's list without their involvement.
+ *
+ * A `decimals()` of 2**256-1 then makes `10n ** d` throw
+ * "RangeError: Maximum BigInt size exceeded" while formatting, which aborts
+ * rendering of the WHOLE table. One hostile token would brick any user's scan.
+ * Clamp to the range a real ERC20 can occupy and fall back to 18.
+ */
+function safeDecimals(raw) {
+  if (raw == null) return 18;
+  const n = Number(decodeUint(raw));
+  return Number.isInteger(n) && n >= 0 && n <= 36 ? n : 18;
 }
 
 /** Calldata that revokes a given approval. */
