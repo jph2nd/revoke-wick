@@ -729,6 +729,13 @@ if (feeContractReady) {
   $('contract-link').classList.add('hidden');
 }
 
+// Point the footer explorer link at the deployed contract from config rather
+// than hardcoding it in the HTML, so the link can never drift from the address
+// the site actually charges fees to.
+$('explorer-link').href = feeContractReady
+  ? `${CHAIN.explorer}/address/${FEE_CONTRACT}`
+  : CHAIN.explorer;
+
 $('rpc-note').textContent = `via ${new URL(currentRpc()).host}`;
 
 loadFees().then(refreshBurnStats);
