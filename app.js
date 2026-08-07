@@ -650,6 +650,65 @@ async function revokeOne(item, tr) {
   refreshBurnStats();
 }
 
+/**
+ * EIP-5792 batch send: hand the wallet every call at once so the user confirms
+ * ONCE instead of once per token.
+ *
+ * PulseChain has no EIP-7702, so a true atomic batch is impossible — but 5792
+ * explicitly allows non-atomic execution ("in the case of EOA wallets the
+ * wallet_send* method might send more than one transaction"), which still
+ * collapses N popups into one prompt. atomicRequired is false because
+ * demanding atomicity here would make every wallet reject the request.
+ *
+ * Returns a batch id, or null when the wallet does not implement 5792 — the
+ * caller then falls back to sending the calls one at a time.
+ */
+async function trySendCalls(calls) {
+  if (!state.provider?.request) return null;
+  try {
+    const res = await state.provider.request({
+      method: 'wallet_sendCalls',
+      params: [
+        {
+          version: '2.0.0',
+          chainId: CHAIN.idHex,
+          from: state.account,
+          atomicRequired: false,
+          calls,
+        },
+      ],
+    });
+    return typeof res === 'string' ? res : (res?.id ?? null);
+  } catch (e) {
+    // A rejection is a decision, not a capability gap — do not silently retry
+    // the slow path and prompt the user all over again.
+    if (e?.code === 4001 || /user rejected|denied/i.test(e?.message || '')) throw e;
+    return null;
+  }
+}
+
+/** Poll EIP-5792 batch status. Status >= 200 is terminal (200 = confirmed). */
+async function waitForCalls(id, timeoutMs = 300_000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const s = await state.provider.request({
+        method: 'wallet_getCallsStatus',
+        params: [id],
+      });
+      const code = typeof s?.status === 'number' ? s.status : null;
+      if (code !== null && code >= 200) return s;
+      if (typeof s?.status === 'string' && /confirmed|success/i.test(s.status)) {
+        return s; // older wallets still on the v1 string statuses
+      }
+    } catch {
+      /* transient; keep polling */
+    }
+    await new Promise((r) => setTimeout(r, 2500));
+  }
+  throw new Error('timed out waiting for the batch');
+}
+
 async function revokeBatch() {
   if (!(await guardWallet())) return;
   const items = state.approvals.filter((a) => state.selected.has(a.key));
@@ -666,13 +725,44 @@ async function revokeBatch() {
       feeContractReady
         ? `One ${fmtPls(state.fees.batch)} fee payment covers the whole batch.`
         : 'No fee is charged.',
-      `Then ${items.length} separate transactions, one per token.`,
-      'PulseChain cannot bundle these — each token must be signed individually. You can reject any of them without losing the fee for the ones already done.',
+      `Then one revoke per token — ${items.length} in total.`,
+      'If your wallet supports batching it will ask you once. Otherwise it asks once per token; you can reject any of them, and the ones already done stay revoked.',
     ],
     okText: `Pay & revoke ${items.length}`,
   });
   if (!ok) return;
 
+  // --- fast path: one confirmation for the fee and every revoke ------------
+  const calls = [];
+  if (feeContractReady) {
+    calls.push({
+      to: FEE_CONTRACT,
+      value: '0x' + state.fees.batch.toString(16),
+      data: SEL.payBatchFee + padUint(items.length),
+    });
+  }
+  for (const item of items) {
+    const c = revokeCalldata(item);
+    calls.push({ to: c.to, data: c.data, value: '0x0' });
+  }
+
+  try {
+    const batchId = await trySendCalls(calls);
+    if (batchId) {
+      toast(`Sent ${items.length} revokes as one batch — waiting…`);
+      await waitForCalls(batchId);
+      // The wallet reports the batch, not per-call success. Re-scan so the
+      // table reflects real on-chain state rather than an assumption.
+      toast(`Batch complete — rechecking on-chain`);
+      refreshBurnStats();
+      return startScan(state.viewing || state.account, false);
+    }
+  } catch (e) {
+    toast(walletError(e), 'err');
+    return;
+  }
+
+  // --- fallback: wallets without EIP-5792, one transaction at a time -------
   try {
     await payFee('batch', items.length);
   } catch (e) {
