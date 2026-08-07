@@ -3,9 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Revoke WICK — PulseChain Token Approval Checker</title>
+<title>revoke.wick.pics — PulseChain Token Approval Checker</title>
 <meta name="description" content="Find and revoke risky token approvals on PulseChain. Half of every fee buys and burns WICK." />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🕯️</text></svg>" />
+<link rel="icon" href="./favicon.png" type="image/png" />
+<link rel="apple-touch-icon" href="./wick.png" />
 <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -13,8 +14,8 @@
 <header class="topbar">
   <div class="wrap topbar-inner">
     <a class="brand" href="./">
-      <span class="brand-mark">🕯️</span>
-      <span class="brand-text">revoke<span class="dot">.</span>wick</span>
+      <img class="brand-mark" src="./wick.png" alt="" width="32" height="32" />
+      <span class="brand-text">revoke<span class="dot">.</span>wick<span class="dot">.</span>pics</span>
     </a>
     <div class="topbar-right">
       <span id="net-pill" class="pill hidden"></span>
@@ -27,6 +28,7 @@
 
   <!-- ---------------------------------------------------------------- hero -->
   <section id="hero" class="hero">
+   <div class="hero-copy">
     <h1>Revoke token approvals on PulseChain</h1>
     <p class="lede">
       Every token you have ever traded left a standing permission behind. If that
@@ -48,6 +50,8 @@
       <li><strong>No backend.</strong> Static files talking to public PulseChain RPCs — we run no server and log nothing. Those public RPCs do see your IP and the address you look up.</li>
       <li><strong>Half of every fee burns WICK.</strong> Bought on-market, sent to <code>0x…0369</code>, forever.</li>
     </ul>
+   </div>
+   <img class="hero-wick" src="./wick.gif" alt="Green Wick" width="240" height="240" loading="eager" />
   </section>
 
   <!-- ------------------------------------------------------------- scanning -->
@@ -110,7 +114,7 @@
   <!-- ----------------------------------------------------------- burn stats -->
   <section id="burn-panel" class="panel burn">
     <div class="burn-head">
-      <h2>WICK buy &amp; burn</h2>
+      <h2><img class="burn-wick" src="./wick.png" alt="" width="28" height="28" />WICK buy &amp; burn</h2>
       <a class="muted small" id="contract-link" target="_blank" rel="noopener">fee contract</a>
     </div>
     <p class="muted small">

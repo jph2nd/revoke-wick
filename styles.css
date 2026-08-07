@@ -68,7 +68,11 @@ a:hover { text-decoration: underline; }
   color: var(--text); font-weight: 700; font-size: 1.06rem; letter-spacing: -0.01em;
 }
 .brand:hover { text-decoration: none; }
-.brand-mark { font-size: 1.25rem; }
+.brand-mark {
+  width: 32px; height: 32px; border-radius: 8px; display: block;
+  border: 1px solid var(--line-2);
+  box-shadow: 0 0 12px rgba(53, 208, 127, 0.22);
+}
 .brand .dot { color: var(--green); }
 .topbar-right { display: flex; align-items: center; gap: 0.7rem; }
 
@@ -107,7 +111,26 @@ a:hover { text-decoration: underline; }
 
 /* --------------------------------------------------------------------- hero */
 
-.hero { padding: 4rem 0 2.5rem; max-width: 760px; }
+.hero {
+  padding: 4rem 0 2.5rem;
+  display: flex; align-items: center; gap: 3rem;
+}
+.hero-copy { max-width: 760px; flex: 1 1 auto; min-width: 0; }
+
+/* Green Wick — the token this site burns. Sits beside the copy on wide
+   screens, drops out entirely on narrow ones so it never pushes the
+   connect button below the fold. */
+.hero-wick {
+  flex: none;
+  width: 240px; height: 240px;
+  border-radius: 22px;
+  border: 1px solid #21402f;
+  box-shadow:
+    0 0 0 1px rgba(53, 208, 127, 0.10),
+    0 18px 50px -12px rgba(53, 208, 127, 0.30);
+  align-self: center;
+}
+@media (max-width: 900px) { .hero-wick { display: none; } }
 .hero h1 {
   font-size: clamp(2rem, 5vw, 3rem);
   line-height: 1.1; letter-spacing: -0.03em; margin: 0 0 1rem;
@@ -234,7 +257,14 @@ a:hover { text-decoration: underline; }
 
 .burn { border-color: #33241c; background: linear-gradient(180deg, #14100e, var(--panel)); }
 .burn-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
-.burn-head h2 { margin: 0 0 0.4rem; font-size: 1.15rem; }
+.burn-head h2 {
+  margin: 0 0 0.4rem; font-size: 1.15rem;
+  display: flex; align-items: center; gap: 0.55rem;
+}
+.burn-wick {
+  width: 28px; height: 28px; border-radius: 7px; flex: none;
+  border: 1px solid #3a2a1f;
+}
 .stat-row {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 1rem; margin: 1.3rem 0;
