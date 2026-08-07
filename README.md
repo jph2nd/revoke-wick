@@ -101,8 +101,13 @@ reviewers reproduced it independently.
 WICK clears the minimum, bounds the burn cooldown so it can never freeze the
 pot's only exit, and rejects a thinned route rather than only an empty one.
 
-Contract source is in [`contracts/`](contracts/). Verify the deployed bytecode
-yourself on the explorer before trusting it with anything.
+Contract source is in [`contracts/`](contracts/), and the deployed contract is
+verified in two independent places — the
+[PulseChain explorer](https://scan.pulsechain.com/address/0x02a765241c2AD5863cf7f67C1AfBA3C3c623d000#code)
+(exact bytecode match) and
+[Sourcify](https://repo.sourcify.dev/369/0x02a765241c2AD5863cf7f67C1AfBA3C3c623d000)
+(`exact_match`). [`VERIFY.md`](VERIFY.md) shows how to reproduce the bytecode
+yourself and trust neither.
 
 ---
 

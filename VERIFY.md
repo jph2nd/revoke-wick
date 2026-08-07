@@ -9,17 +9,21 @@ the source in this repo and compare it against what is actually on-chain.
 
 ---
 
-## Already verified on Sourcify
+## Already verified, in two independent places
 
-- **Match: `exact_match`** (full metadata match — the strongest tier)
+**PulseChain explorer** — full source and ABI, exact bytecode match
+(`is_fully_verified: true`, `is_partially_verified: false`):
+
+<https://scan.pulsechain.com/address/0x02a765241c2AD5863cf7f67C1AfBA3C3c623d000#code>
+
+**Sourcify** — `exact_match`, the strongest tier (full metadata match):
+
 - Viewer: <https://repo.sourcify.dev/369/0x02a765241c2AD5863cf7f67C1AfBA3C3c623d000>
 - API: <https://sourcify.dev/server/v2/contract/369/0x02a765241c2AD5863cf7f67C1AfBA3C3c623d000>
 
-> **Why not scan.pulsechain.com?** Its verification service is returning HTTP 500
-> and could not accept the submission. Sourcify's own attempt to forward the
-> verification to it failed with `530 origin unreachable`. This is an outage on
-> their side, not a problem with the contract. It will be re-submitted when
-> their service recovers.
+Two independent verifications of the same bytecode is a stronger guarantee than
+either alone — they compile the source separately and both reach the deployed
+code. You can still reproduce it yourself below and trust neither.
 
 ---
 
