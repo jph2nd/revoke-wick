@@ -12,7 +12,7 @@
 <body>
 
 <header class="topbar">
-  <div class="wrap topbar-inner">
+  <div class="wrap topbar-inner" id="topbar-inner">
     <a class="brand" href="./">
       <img class="brand-mark" src="./wick.png" alt="" width="32" height="32" />
       <span class="brand-text">revoke<span class="dot">.</span>wick<span class="dot">.</span>pics</span>
@@ -98,6 +98,10 @@
         <label class="check">
           <input type="checkbox" id="only-risky" checked />
           <span>Only unlimited &amp; blanket</span>
+        </label>
+        <label class="check select-all-mobile" id="select-all-mobile-wrap">
+          <input type="checkbox" id="select-all-mobile" />
+          <span>Select all</span>
         </label>
         <button id="rescan" class="btn btn-ghost">Rescan</button>
       </div>

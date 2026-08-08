@@ -154,7 +154,11 @@ async function connect() {
     // A mobile browser has no injected provider at all — wallets only inject
     // inside their own in-app browser. Telling someone on a phone to "install
     // an extension" is a dead end, so offer the deep link instead.
-    if (/android|iphone|ipad|ipod/i.test(navigator.userAgent || '')) {
+    const ua = navigator.userAgent || '';
+    // iPadOS 13+ reports a Macintosh UA, so sniffing alone misses iPads;
+    // a touch-capable "Mac" is one.
+    const isTouchMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+    if (/android|iphone|ipad|ipod/i.test(ua) || isTouchMac) {
       const go = await confirmModal({
         title: 'Open in your wallet app',
         rows: [['Why', 'Mobile browsers have no wallet built in']],
@@ -279,6 +283,9 @@ function resetToDisconnected() {
   $('connect').textContent = 'Connect Wallet';
   $('net-pill').classList.add('hidden');
   $('net-pill').onclick = null;
+  $('topbar-inner').classList.remove('net-warn');
+  $('select-all-mobile').checked = false;
+  $('select-all').checked = false;
   $('results').classList.add('hidden');
   $('scanning').classList.add('hidden');
   $('hero').classList.remove('hidden');
@@ -374,19 +381,25 @@ function renderNetwork() {
   if (state.readOnly) {
     pill.textContent = `read-only · ${shortAddr(state.viewing)}`;
     pill.className = 'pill';
+    pill.onclick = null;
+    $('topbar-inner').classList.remove('net-warn');
     return;
   }
   if (!state.account) {
     pill.classList.add('hidden');
+    $('topbar-inner').classList.remove('net-warn');
     return;
   }
   if (onRightChain()) {
     pill.textContent = `PulseChain · ${shortAddr(state.account)}`;
     pill.className = 'pill ok';
+    pill.onclick = null;
+    $('topbar-inner').classList.remove('net-warn');
   } else {
     pill.textContent = 'Wrong network — click to switch';
     pill.className = 'pill warn';
     pill.onclick = ensureChain;
+    $('topbar-inner').classList.add('net-warn');
   }
   // Caret signals the button is now a menu, not a connect action.
   $('connect').textContent = `${shortAddr(state.account)} ▾`;
@@ -957,12 +970,14 @@ $('only-risky').onchange = renderRows;
 $('revoke-batch').onclick = revokeBatch;
 $('do-burn').onclick = triggerBurn;
 
-$('select-all').onchange = (e) => {
+const onSelectAll = (e) => {
   const rows = visibleApprovals();
   if (e.target.checked) rows.forEach((a) => state.selected.add(a.key));
   else rows.forEach((a) => state.selected.delete(a.key));
   renderRows();
 };
+$('select-all').onchange = onSelectAll;
+$('select-all-mobile').onchange = onSelectAll;
 
 $('lookup-form').onsubmit = (e) => {
   e.preventDefault();

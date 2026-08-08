@@ -237,6 +237,7 @@ a:hover { text-decoration: underline; }
 .results-head h2 { margin: 0; font-size: 1.35rem; letter-spacing: -0.02em; }
 .results-head p { margin: 0.15rem 0 0; }
 .results-actions { display: flex; align-items: center; gap: 0.9rem; }
+.select-all-mobile { display: none; }
 .check { display: flex; align-items: center; gap: 0.45rem; font-size: 0.88rem; color: var(--muted); cursor: pointer; }
 .check input { accent-color: var(--green); width: 15px; height: 15px; }
 
@@ -358,15 +359,23 @@ a:hover { text-decoration: underline; }
 .toast a { display: block; margin-top: 0.2rem; font-size: 0.82rem; }
 @keyframes slide-in { from { opacity: 0; transform: translateX(14px); } }
 
-@media (max-width: 620px) {
-  .hero { padding: 2.5rem 0 1.5rem; }
-  .lookup { flex: 1 1 100%; }
-  .results-actions { width: 100%; justify-content: space-between; }
+/* Attacker-controlled strings reach the DOM: a token can name itself anything,
+   including a 60-character run with no spaces. Let them wrap everywhere they
+   surface, not just inside the table. */
+.tok-sym, .tok-name, .addr, .modal-body-row .v, .toast {
+  overflow-wrap: anywhere;
+}
 
-  /* The table is min-width 760px, so on a phone it scrolls sideways and the
-     Revoke button — the last column — ends up off-screen entirely. Restack
-     each row as a card so every field and the action are reachable without
-     horizontal scrolling. */
+/* iOS auto-zooms the whole page when a focused input is under 16px, leaving the
+   layout scaled up and scrolled sideways. Applies at every width: iPads and
+   phones in landscape are above the phone breakpoint but still iOS. */
+.lookup input { font-size: 16px; }
+
+/* ---- tablet and below: the table cannot fit, so restack it as cards -------
+   Keyed at 860px, not 620px: the table is min-width 760px, so anything under
+   ~800px scrolls sideways and hides the Revoke button in the last column.
+   621-799px covers iPad mini portrait (744px) and most phones in landscape. */
+@media (max-width: 860px) {
   .table-scroll { border: none; overflow-x: visible; }
   .approvals { min-width: 0; font-size: 0.95rem; }
   .approvals thead { display: none; }
@@ -380,6 +389,7 @@ a:hover { text-decoration: underline; }
   .approvals td {
     display: flex; align-items: center; justify-content: space-between;
     gap: 1rem; padding: 0.45rem 0; border-bottom: none;
+    overflow-wrap: anywhere;
   }
   .approvals td::before {
     content: attr(data-label);
@@ -387,40 +397,96 @@ a:hover { text-decoration: underline; }
     text-transform: uppercase; letter-spacing: 0.05em;
     flex: none;
   }
+
+  /* The checkbox floats over the card's top-right corner — exactly where the
+     right-aligned token symbol sits. Without this it painted over the symbol
+     ("PLSX" rendered as "Pl<box>"), hiding the only identifier of what is about
+     to be revoked. display:block drops the inherited flex layout whose empty
+     ::before + 1rem gap padded the cell out to 45px of tap-stealing strip, and
+     the Token cell reserves the space so nothing is drawn underneath. */
   .approvals td.col-check {
-    position: absolute; top: 0.6rem; right: 0.7rem; width: auto; padding: 0;
+    position: absolute; top: 0.6rem; right: 0.7rem;
+    width: auto; padding: 0; display: block;
   }
+  .approvals td.col-check::before { content: none; }
+  .approvals tbody td[data-label="Token"] { padding-right: 2.1rem; }
+
   .approvals td.col-action { width: auto; padding-top: 0.7rem; }
   .approvals td.col-action .btn { width: 100%; }
   .tok { align-items: flex-end; text-align: right; }
 
-  /* Touch targets. 15px checkboxes and ~36px buttons are well under the 44px
-     floor, and the checkbox is how batch selection works. */
+  /* Touch targets: 15px checkboxes and ~36px buttons are under the 44px floor,
+     and the checkbox is how batch selection works. */
   .btn { min-height: 44px; }
   .btn-sm { min-height: 40px; }
   .col-check input, .check input { width: 22px; height: 22px; }
-  .batch-bar { position: sticky; bottom: 0; z-index: 30; }
-  .batch-bar .btn { margin-left: 0; width: 100%; }
 
-  /* Brand + status pill + address button do not fit a 320px topbar. The
-     connected pill is redundant there (the button already shows the address),
-     but the "wrong network" pill must stay — it is the only prompt to switch. */
-  .pill.ok { display: none; }
+  /* select-all lives in the thead the card layout hides, so batch selection
+     would need N individual taps. Surface it in the results header instead. */
+  .select-all-mobile { display: flex; }
+
+  /* The batch bar sits BEFORE the list in the DOM, so position:sticky bottom
+     never engages — it has already been scrolled past. Fixed to the viewport
+     also keeps it out of flow, so revealing it cannot shove the card list
+     down under the user's finger. */
+  .batch-bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+    margin: 0; border-radius: 0;
+    border-left: none; border-right: none; border-bottom: none;
+    padding: 0.8rem 1.1rem calc(0.8rem + env(safe-area-inset-bottom, 0px));
+    background: var(--panel-2);
+  }
+  .batch-bar .btn { margin-left: 0; width: 100%; }
+  /* Room so the last card is not trapped behind the fixed bar. */
+  #results:has(#batch-bar:not(.hidden)) { padding-bottom: 8rem; }
+}
+
+/* ---- phones ------------------------------------------------------------- */
+@media (max-width: 620px) {
+  .hero { padding: 2.5rem 0 1.5rem; }
+  .lookup { flex: 1 1 100%; }
+  .results-actions { width: 100%; justify-content: space-between; flex-wrap: wrap; }
+
+  /* Brand + pill + address button do not fit a 320px topbar. Hide every pill
+     EXCEPT the wrong-network warning: `.pill.ok` alone missed the read-only
+     pill (className is set to plain 'pill'), which then collapsed to a 69px
+     column ~88px tall, burst the 62px bar and pushed the button off-screen. */
+  .pill:not(.warn) { display: none; }
   .brand-text { font-size: 0.98rem; }
   .topbar-right { gap: 0.45rem; }
 
-  /* iOS auto-zooms the whole page when a focused input is under 16px, which
-     leaves the layout scaled up and scrolled sideways. 0.9rem = 14.4px. */
-  .lookup input { font-size: 16px; }
+  /* The warning pill is the ONLY control that switches chain, and wrong-network
+     is the default first-run state on mobile since PulseChain is not
+     preconfigured in wallets. Give the wallet cluster its own row rather than
+     letting the pill collapse to min-content and burst the header. */
+  .topbar-inner.net-warn {
+    flex-wrap: wrap; height: auto; min-height: 62px;
+    row-gap: 0.45rem; padding-bottom: 0.5rem;
+  }
+  .topbar-inner.net-warn .topbar-right {
+    flex: 1 0 100%; justify-content: flex-end;
+  }
+  #net-pill.warn { flex: 1 1 auto; min-width: 0; text-align: center; }
 
-  /* Long unbroken strings (42-char addresses, spaceless token names) must not
-     force a horizontal page scroll inside the restacked cards. */
-  .approvals td { overflow-wrap: anywhere; }
+  /* Toasts must clear the fixed batch bar, and the container must never
+     intercept taps meant for the button underneath it. */
+  .toasts {
+    bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px));
+    left: 1.2rem; pointer-events: none;
+  }
+  .toast { max-width: 100%; pointer-events: auto; }
+  body:has(#batch-bar:not(.hidden)) .toasts {
+    bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+  }
+}
 
-  /* Keep the sticky batch bar and the toasts clear of the home indicator. */
-  .batch-bar { padding-bottom: calc(0.8rem + env(safe-area-inset-bottom, 0px)); }
-  .toasts { bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px)); left: 1.2rem; }
-  .toast { max-width: 100%; }
+/* ---- very narrow (320px Android, Galaxy Fold cover) --------------------- */
+@media (max-width: 380px) {
+  /* .lookup measured 302px inside a 280px container, clipping the Check button
+     and giving the page a horizontal scroll on first load. */
+  .lookup { flex-wrap: wrap; }
+  .lookup input, .lookup .btn { flex: 1 1 100%; }
+  .stat-row { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
