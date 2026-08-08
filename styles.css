@@ -362,6 +362,52 @@ a:hover { text-decoration: underline; }
   .hero { padding: 2.5rem 0 1.5rem; }
   .lookup { flex: 1 1 100%; }
   .results-actions { width: 100%; justify-content: space-between; }
+
+  /* The table is min-width 760px, so on a phone it scrolls sideways and the
+     Revoke button — the last column — ends up off-screen entirely. Restack
+     each row as a card so every field and the action are reachable without
+     horizontal scrolling. */
+  .table-scroll { border: none; overflow-x: visible; }
+  .approvals { min-width: 0; font-size: 0.95rem; }
+  .approvals thead { display: none; }
+  .approvals tbody tr {
+    display: block; margin-bottom: 0.7rem; padding: 0.35rem 0.85rem 0.75rem;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--panel);
+    position: relative;
+  }
+  .approvals tbody tr:hover { background: var(--panel); }
+  .approvals td {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; padding: 0.45rem 0; border-bottom: none;
+  }
+  .approvals td::before {
+    content: attr(data-label);
+    color: var(--dim); font-size: 0.78rem;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    flex: none;
+  }
+  .approvals td.col-check {
+    position: absolute; top: 0.6rem; right: 0.7rem; width: auto; padding: 0;
+  }
+  .approvals td.col-action { width: auto; padding-top: 0.7rem; }
+  .approvals td.col-action .btn { width: 100%; }
+  .tok { align-items: flex-end; text-align: right; }
+
+  /* Touch targets. 15px checkboxes and ~36px buttons are well under the 44px
+     floor, and the checkbox is how batch selection works. */
+  .btn { min-height: 44px; }
+  .btn-sm { min-height: 40px; }
+  .col-check input, .check input { width: 22px; height: 22px; }
+  .batch-bar { position: sticky; bottom: 0; z-index: 30; }
+  .batch-bar .btn { margin-left: 0; width: 100%; }
+
+  /* Brand + status pill + address button do not fit a 320px topbar. The
+     connected pill is redundant there (the button already shows the address),
+     but the "wrong network" pill must stay — it is the only prompt to switch. */
+  .pill.ok { display: none; }
+  .brand-text { font-size: 0.98rem; }
+  .topbar-right { gap: 0.45rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -151,6 +151,26 @@ function discoverProviders() {
 async function connect() {
   const providers = discoverProviders();
   if (providers.length === 0) {
+    // A mobile browser has no injected provider at all — wallets only inject
+    // inside their own in-app browser. Telling someone on a phone to "install
+    // an extension" is a dead end, so offer the deep link instead.
+    if (/android|iphone|ipad|ipod/i.test(navigator.userAgent || '')) {
+      const go = await confirmModal({
+        title: 'Open in your wallet app',
+        rows: [['Why', 'Mobile browsers have no wallet built in']],
+        steps: [
+          'A wallet only provides a connection inside its own in-app browser, so a normal mobile browser has nothing to connect to.',
+          'Reopen this page inside MetaMask, then connect there.',
+          'Or paste any address in the box above to check it read-only — that needs no wallet at all.',
+        ],
+        okText: 'Open in MetaMask',
+      });
+      if (go) {
+        location.href =
+          `https://metamask.app.link/dapp/${location.host}${location.pathname}`;
+      }
+      return;
+    }
     toast('No wallet found. Install MetaMask or another PulseChain wallet.', 'err');
     return;
   }
@@ -551,6 +571,13 @@ function renderRows() {
       btn.onclick = () => revokeOne(a, tr);
       tdAct.appendChild(btn);
     }
+
+    // Labels for the stacked mobile layout, where the header row is hidden and
+    // each cell renders its own name via td::before.
+    tdTok.dataset.label = 'Token';
+    tdAmt.dataset.label = 'Approved';
+    tdRisk.dataset.label = 'At risk';
+    tdSp.dataset.label = 'Spender';
 
     tr.append(tdCheck, tdTok, tdAmt, tdRisk, tdSp, tdAct);
     body.appendChild(tr);
