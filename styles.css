@@ -137,15 +137,15 @@ a:hover { text-decoration: underline; }
 /* Green Wick — the token this site burns. Sits beside the copy on wide
    screens, drops out entirely on narrow ones so it never pushes the
    connect button below the fold. */
-.hero-wick {
-  flex: none;
+.hero-wick { flex: none; align-self: center; display: block; line-height: 0; }
+.hero-wick img {
+  display: block;
   width: 240px; height: 240px;
   border-radius: 22px;
   border: 1px solid #21402f;
   box-shadow:
     0 0 0 1px rgba(53, 208, 127, 0.10),
     0 18px 50px -12px rgba(53, 208, 127, 0.30);
-  align-self: center;
 }
 @media (max-width: 900px) { .hero-wick { display: none; } }
 .hero h1 {
@@ -408,6 +408,19 @@ a:hover { text-decoration: underline; }
   .pill.ok { display: none; }
   .brand-text { font-size: 0.98rem; }
   .topbar-right { gap: 0.45rem; }
+
+  /* iOS auto-zooms the whole page when a focused input is under 16px, which
+     leaves the layout scaled up and scrolled sideways. 0.9rem = 14.4px. */
+  .lookup input { font-size: 16px; }
+
+  /* Long unbroken strings (42-char addresses, spaceless token names) must not
+     force a horizontal page scroll inside the restacked cards. */
+  .approvals td { overflow-wrap: anywhere; }
+
+  /* Keep the sticky batch bar and the toasts clear of the home indicator. */
+  .batch-bar { padding-bottom: calc(0.8rem + env(safe-area-inset-bottom, 0px)); }
+  .toasts { bottom: calc(1.2rem + env(safe-area-inset-bottom, 0px)); left: 1.2rem; }
+  .toast { max-width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

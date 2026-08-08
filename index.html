@@ -64,7 +64,14 @@
       <li><strong><a id="verified-link" target="_blank" rel="noopener">Contract is verified.</a></strong> Read the source yourself — exact bytecode match on the PulseChain explorer.</li>
     </ul>
    </div>
-   <img class="hero-wick" src="./wick.gif" alt="Green Wick" width="240" height="240" loading="eager" />
+   <!-- display:none does NOT stop an <img src> downloading, so a phone would
+        still pay 161 KB for art it never sees. <picture> with a media source
+        means the file is only fetched at widths that actually show it. -->
+   <picture class="hero-wick">
+     <source media="(min-width: 901px)" srcset="./wick.gif" />
+     <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+          alt="Green Wick" width="240" height="240" decoding="async" />
+   </picture>
   </section>
 
   <!-- ------------------------------------------------------------- scanning -->
