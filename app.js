@@ -19,6 +19,12 @@ import {
   decodeUint,
 } from './rpc.js';
 import {
+  initDiscovery,
+  listProviders,
+  providerKey,
+  describeProvider,
+} from './wallet.js';
+import {
   scanApprovals,
   revokeCalldata,
   KIND,
@@ -41,6 +47,10 @@ const state = {
   selected: new Set(),
   fees: { single: FEES.single * 10n ** 18n, batch: FEES.batch * 10n ** 18n },
   scanning: false,
+  connecting: false,
+  walletName: null,
+  /** providers whose events are already bound, by object identity */
+  bound: new Set(),
 };
 
 // ---------------------------------------------------------------- formatting
@@ -135,21 +145,161 @@ function confirmModal({ title, rows, steps, okText = 'Continue' }) {
 
 // ------------------------------------------------------------------- wallet
 
-/** EIP-6963 discovery, falling back to the legacy injected provider. */
-function discoverProviders() {
-  const found = [];
-  const onAnnounce = (e) => found.push(e.detail);
-  window.addEventListener('eip6963:announceProvider', onAnnounce);
-  window.dispatchEvent(new Event('eip6963:requestProvider'));
-  window.removeEventListener('eip6963:announceProvider', onAnnounce);
-  if (found.length === 0 && window.ethereum) {
-    found.push({ info: { name: 'Injected Wallet' }, provider: window.ethereum });
+const WALLET_PREF_KEY = 'wick.wallet';
+
+function rememberWallet(key) {
+  try {
+    if (key) localStorage.setItem(WALLET_PREF_KEY, key);
+  } catch {
+    /* private mode — the chooser just appears again next time */
   }
-  return found;
 }
 
-async function connect() {
-  const providers = discoverProviders();
+function forgetWallet() {
+  try {
+    localStorage.removeItem(WALLET_PREF_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function rememberedWallet() {
+  try {
+    return localStorage.getItem(WALLET_PREF_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ask which wallet to use. Returns the chosen entry, or null if cancelled.
+ *
+ * Never auto-picks from a list of several. Taking providers[0] is what forces
+ * everyone with Phantom installed into Phantom, because Phantom announces first
+ * and also owns window.ethereum.
+ */
+function chooseWallet(entries, { force = false } = {}) {
+  if (entries.length === 0) return Promise.resolve(null);
+  if (!force) {
+    if (entries.length === 1) return Promise.resolve(entries[0]);
+    const pref = rememberedWallet();
+    if (pref) {
+      const hit = entries.find((e) => providerKey(e) === pref);
+      if (hit) return Promise.resolve(hit);
+    }
+  }
+
+  return new Promise((resolve) => {
+    const list = $('wallet-picker-list');
+    list.innerHTML = '';
+    for (const entry of entries) {
+      const name = entry.info?.name || describeProvider(entry.provider);
+      const btn = document.createElement('button');
+      btn.className = 'wallet-option';
+      btn.type = 'button';
+
+      if (entry.info?.icon && /^data:image\//.test(entry.info.icon)) {
+        // 6963 icons are data URIs, which the CSP's img-src 'self' data: allows.
+        const img = document.createElement('img');
+        img.src = entry.info.icon;
+        img.alt = '';
+        img.width = 28;
+        img.height = 28;
+        btn.appendChild(img);
+      }
+      const label = document.createElement('span');
+      label.textContent = name;
+      btn.appendChild(label);
+
+      btn.onclick = () => close(entry);
+      list.appendChild(btn);
+    }
+
+    const close = (v) => {
+      $('wallet-picker').classList.add('hidden');
+      $('wallet-picker-cancel').onclick = null;
+      document.removeEventListener('keydown', onKey);
+      resolve(v);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') close(null);
+    };
+    // An abandoned chooser must not strand the next connect behind a promise
+    // that never settles, so Esc and Cancel both resolve.
+    $('wallet-picker-cancel').onclick = () => close(null);
+    document.addEventListener('keydown', onKey);
+    $('wallet-picker').classList.remove('hidden');
+  });
+}
+
+/**
+ * Bind account/chain events, once per provider object.
+ *
+ * A single global "already bound" flag was wrong: after switching to a second
+ * wallet the new provider had no listeners at all, so account changes there
+ * went completely unnoticed while the page kept showing the old account's
+ * approvals — and revoking against the wrong account still charges a fee.
+ */
+function bindProviderEvents() {
+  const p = state.provider;
+  if (!p || state.bound.has(p)) return;
+  state.bound.add(p);
+
+  p.on?.('accountsChanged', (accs) => {
+    if (p !== state.provider) return; // a stale wallet must not hijack the session
+    const next = accs?.[0]?.toLowerCase() ?? null;
+    if (next && next !== state.account) {
+      onAccountChanged(next);
+    } else if (!next) {
+      resetToDisconnected();
+    }
+  });
+  p.on?.('chainChanged', (id) => {
+    if (p !== state.provider) return;
+    state.chainId = id;
+    renderNetwork();
+  });
+  p.on?.('disconnect', () => {
+    // Often just an RPC hiccup rather than a real disconnect. Re-ask before
+    // wiping a working session.
+    setTimeout(async () => {
+      try {
+        const accs = await p.request({ method: 'eth_accounts' });
+        if (!accs?.length) resetToDisconnected();
+      } catch {
+        resetToDisconnected();
+      }
+    }, 1200);
+  });
+}
+
+/**
+ * One path for every account change. Everything shown is per-account, so the
+ * old account's approvals and selection must be dropped together — showing one
+ * account's rows while another is connected is a lie the user could act on.
+ */
+function onAccountChanged(next) {
+  state.account = next;
+  state.selected.clear();
+  state.approvals = [];
+  $('approvals-body').innerHTML = '';
+  renderBatchBar();
+  renderNetwork();
+  startScan(next, false);
+}
+
+/** ?address=0x… deep link, if present and well-formed. */
+function qsAddress() {
+  const v = new URLSearchParams(location.search).get('address');
+  return v && /^0x[0-9a-fA-F]{40}$/.test(v) ? v : null;
+}
+
+async function connect(opts = {}) {
+  if (state.connecting) {
+    toast('Check your wallet — a connection request is already open.', 'warn');
+    return;
+  }
+  const providers = listProviders();
   if (providers.length === 0) {
     // A mobile browser has no injected provider at all — wallets only inject
     // inside their own in-app browser. Telling someone on a phone to "install
@@ -178,11 +328,12 @@ async function connect() {
     toast('No wallet found. Install MetaMask or another PulseChain wallet.', 'err');
     return;
   }
-  // Multiple wallets could be present; the injected default is the sane pick
-  // and avoids building a wallet-picker UI for v1.
-  const chosen = providers[0];
+  const chosen = await chooseWallet(providers, { force: opts.force });
+  if (!chosen) return; // cancelled
   state.provider = chosen.provider;
+  state.walletName = chosen.info?.name || describeProvider(chosen.provider);
 
+  state.connecting = true;
   try {
     const accounts = await state.provider.request({
       method: 'eth_requestAccounts',
@@ -190,31 +341,20 @@ async function connect() {
     if (!accounts?.length) throw new Error('no accounts returned');
     state.account = accounts[0].toLowerCase();
     state.chainId = await state.provider.request({ method: 'eth_chainId' });
+    rememberWallet(providerKey(chosen));
   } catch (e) {
-    toast(walletError(e), 'err');
+    // -32002 means a popup is already open and hidden behind the window.
+    if (e?.code === -32002) {
+      toast('Your wallet already has a request open — click its toolbar icon.', 'warn');
+    } else {
+      toast(walletError(e), 'err');
+    }
     return;
+  } finally {
+    state.connecting = false;
   }
 
-  // Bind provider events exactly once. connect() can run several times (retry,
-  // change-wallet), and re-binding would fire every handler N times.
-  if (!state.listenersBound) {
-    state.listenersBound = true;
-    state.provider.on?.('accountsChanged', (accs) => {
-      const next = accs?.[0]?.toLowerCase() ?? null;
-      if (next) {
-        state.account = next;
-        renderNetwork();
-        startScan(next, false);
-      } else {
-        // The wallet revoked access from its own UI.
-        resetToDisconnected();
-      }
-    });
-    state.provider.on?.('chainChanged', (id) => {
-      state.chainId = id;
-      renderNetwork();
-    });
-  }
+  bindProviderEvents();
 
   renderNetwork();
   if (!onRightChain()) {
@@ -233,6 +373,11 @@ async function connect() {
  */
 async function switchWallet() {
   closeWalletMenu();
+  // More than one wallet installed? Offer the chooser rather than only
+  // re-prompting the current one for a different account.
+  if (listProviders().length > 1) {
+    return connect({ force: true });
+  }
   try {
     await state.provider.request({
       method: 'wallet_requestPermissions',
@@ -266,6 +411,7 @@ async function disconnectWallet() {
   } catch {
     /* unsupported on this wallet — local reset below is the fallback */
   }
+  forgetWallet();
   resetToDisconnected();
   toast('Wallet disconnected.');
 }
@@ -1013,7 +1159,63 @@ $('verified-link').href = feeContractReady
 
 loadFees().then(refreshBurnStats);
 
+/**
+ * Restore a previous session WITHOUT a popup. eth_accounts returns only what
+ * was already granted; eth_requestAccounts (which prompts) must never fire
+ * except from a real tap.
+ */
+async function silentReconnect() {
+  const pref = rememberedWallet();
+  if (!pref) return;
+  // Give slow announcers a moment before deciding the wallet is absent.
+  await new Promise((r) => setTimeout(r, 350));
+  const entry = listProviders().find((e) => providerKey(e) === pref);
+  if (!entry) return;
+  try {
+    const accounts = await entry.provider.request({ method: 'eth_accounts' });
+    if (!accounts?.length) return;
+    state.provider = entry.provider;
+    state.walletName = entry.info?.name || describeProvider(entry.provider);
+    state.account = accounts[0].toLowerCase();
+    state.chainId = await entry.provider.request({ method: 'eth_chainId' });
+    bindProviderEvents();
+    renderNetwork();
+    startScan(state.account, false);
+  } catch {
+    /* stay signed out */
+  }
+}
+
+/**
+ * Some wallets never fire accountsChanged when the user switches in their own
+ * popup — OKX in particular often does not even blur the page, so no event of
+ * any kind arrives. Re-read the truth whenever the tab regains attention, and
+ * poll gently while it is visible. Cheap: eth_accounts hits the extension, not
+ * the network, and never prompts.
+ */
+async function recheckAccount() {
+  if (!state.provider || !state.account || state.readOnly) return;
+  try {
+    const accs = await state.provider.request({ method: 'eth_accounts' });
+    const next = accs?.[0]?.toLowerCase() ?? null;
+    if (!next) return resetToDisconnected();
+    if (next !== state.account) onAccountChanged(next);
+  } catch {
+    /* leave the session alone on a transient failure */
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') recheckAccount();
+});
+window.addEventListener('focus', recheckAccount);
+setInterval(() => {
+  if (document.visibilityState === 'visible') recheckAccount();
+}, 2500);
+
+initDiscovery();
+if (!qsAddress()) silentReconnect();
+
 // Deep link: ?address=0x… opens a read-only view.
-const qs = new URLSearchParams(location.search);
-const qAddr = qs.get('address');
-if (qAddr && /^0x[0-9a-fA-F]{40}$/.test(qAddr)) startScan(qAddr, true);
+const deepLinked = qsAddress();
+if (deepLinked) startScan(deepLinked, true);
