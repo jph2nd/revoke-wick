@@ -241,6 +241,16 @@ a:hover { text-decoration: underline; }
 .check { display: flex; align-items: center; gap: 0.45rem; font-size: 0.88rem; color: var(--muted); cursor: pointer; }
 .check input { accent-color: var(--green); width: 15px; height: 15px; }
 
+.resume-bar {
+  display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap;
+  background: linear-gradient(180deg, #17130c, var(--panel));
+  border: 1px solid #6b5417; border-radius: var(--radius-sm);
+  padding: 0.85rem 1rem; margin-bottom: 1rem;
+  font-size: 0.92rem;
+}
+.resume-bar #resume-text { flex: 1 1 240px; color: var(--amber); }
+.resume-bar .btn-sm { min-height: auto; }
+
 .batch-bar {
   display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
   background: var(--panel-2); border: 1px solid var(--green-dim);

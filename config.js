@@ -57,6 +57,11 @@ export const TOPICS = {
   // ApprovalForAll(address,address,bool) — ERC721 and ERC1155.
   ApprovalForAll:
     '0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31',
+  // FeePaid(address indexed payer, bool indexed isBatch, ...) on the fee
+  // contract. Used to PROVE a batch fee was paid before offering a free resume,
+  // rather than trusting a localStorage flag the user could forge.
+  FeePaid:
+    '0xed0b62b2e5d7e802508267e86a2e988dbc077e189b5160a7c3e2f35cdc1c14b0',
 };
 
 // Function selectors — computed with keccak256 and sanity-checked against

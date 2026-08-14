@@ -7,6 +7,7 @@ import {
   FEES,
   SEL,
   SPENDER_LABELS,
+  TOPICS,
   BURN_ADDRESS,
   TOKENS,
 } from './config.js';
@@ -14,6 +15,7 @@ import {
   rpc,
   rpcBatch,
   ethCall,
+  addressTopic,
   padAddress,
   padUint,
   decodeUint,
@@ -895,6 +897,152 @@ async function waitForCalls(id, timeoutMs = 300_000) {
   throw new Error('timed out waiting for the batch');
 }
 
+// ------------------------------------------------------- resumable batches
+
+const BATCH_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function batchKey() {
+  return `wick.batch.${CHAIN.id}.${(state.account || '').toLowerCase()}`;
+}
+
+/**
+ * Persist the outstanding items of a PAID batch.
+ *
+ * Only ever called once the fee is confirmed on-chain. Saving before payment
+ * would turn "start a batch, reject the fee, press Continue" into a free batch
+ * for everyone, which is the one way this feature could cost real revenue.
+ */
+function saveBatchSession(items) {
+  if (!state.account) return;
+  try {
+    localStorage.setItem(batchKey(), JSON.stringify({
+      account: state.account,
+      chainId: CHAIN.id,
+      paidAt: Date.now(),
+      pending: items.map((i) => ({
+        key: i.key, kind: i.kind, token: i.token,
+        spender: i.spender, tokenId: i.tokenId?.toString() ?? null,
+      })),
+    }));
+  } catch {
+    /* private mode: resume simply will not be offered */
+  }
+}
+
+function loadBatchSession() {
+  if (!state.account) return null;
+  try {
+    const raw = localStorage.getItem(batchKey());
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    if (s?.account?.toLowerCase() !== state.account) return null;
+    if (!Array.isArray(s.pending) || s.pending.length === 0) return null;
+    if (Date.now() - (s.paidAt || 0) > BATCH_TTL_MS) {
+      clearBatchSession();
+      return null;
+    }
+    return s;
+  } catch {
+    return null;
+  }
+}
+
+function clearBatchSession() {
+  try {
+    localStorage.removeItem(batchKey());
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Drop one item from the saved batch as soon as its revoke confirms. */
+function markBatchItemDone(key) {
+  const s = loadBatchSession();
+  if (!s) return;
+  s.pending = s.pending.filter((i) => i.key !== key);
+  try {
+    if (s.pending.length === 0) clearBatchSession();
+    else localStorage.setItem(batchKey(), JSON.stringify(s));
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Prove a batch fee was actually paid by this account, by finding the
+ * contract's own FeePaid(payer, isBatch=true) event since `fromBlock`.
+ * localStorage is user-editable; an on-chain event is not.
+ */
+async function verifyBatchFeePaid(fromBlock) {
+  if (!feeContractReady || !state.account) return false;
+  try {
+    const logs = await rpc('eth_getLogs', [{
+      address: FEE_CONTRACT,
+      fromBlock: '0x' + Math.max(0, fromBlock - 2).toString(16),
+      toBlock: 'latest',
+      topics: [
+        TOPICS.FeePaid,
+        addressTopic(state.account),
+        '0x' + '0'.repeat(63) + '1', // isBatch == true
+      ],
+    }]);
+    return Array.isArray(logs) && logs.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Show the resume bar when a paid batch still has live approvals outstanding. */
+function renderResumeBar() {
+  const bar = $('resume-bar');
+  const s = loadBatchSession();
+  if (!s || state.readOnly) {
+    bar.classList.add('hidden');
+    return;
+  }
+  // Only offer what is genuinely still revocable; anything revoked elsewhere
+  // in the meantime is dropped rather than re-sent as a pointless transaction.
+  const live = s.pending.filter((i) =>
+    state.approvals.some((a) => a.key === i.key));
+  if (live.length === 0) {
+    clearBatchSession();
+    bar.classList.add('hidden');
+    return;
+  }
+  $('resume-text').textContent =
+    `You already paid for a batch — ${live.length} approval${live.length === 1 ? '' : 's'} left to revoke. Continuing is free.`;
+  bar.classList.remove('hidden');
+}
+
+/** Finish a paid batch. Charges nothing. */
+async function continueBatch() {
+  if (!(await guardWallet())) return;
+  const s = loadBatchSession();
+  if (!s) return renderResumeBar();
+  const items = state.approvals.filter((a) =>
+    s.pending.some((i) => i.key === a.key));
+  if (items.length === 0) {
+    clearBatchSession();
+    return renderResumeBar();
+  }
+
+  const ok = await confirmModal({
+    title: `Continue batch — ${items.length} left`,
+    rows: [
+      ['Approvals remaining', String(items.length)],
+      ['Fee', 'none — already paid'],
+    ],
+    steps: [
+      'This finishes the batch you already paid for. No further fee is charged.',
+      'If your wallet supports batching it will ask once; otherwise once per token.',
+    ],
+    okText: `Revoke ${items.length}`,
+  });
+  if (!ok) return;
+
+  await runBatchRevokes(items);
+}
+
 async function revokeBatch() {
   if (!(await guardWallet())) return;
   const items = state.approvals.filter((a) => state.selected.has(a.key));
@@ -912,11 +1060,20 @@ async function revokeBatch() {
         ? `One ${fmtPls(state.fees.batch)} fee payment covers the whole batch.`
         : 'No fee is charged.',
       `Then one revoke per token — ${items.length} in total.`,
-      'If your wallet supports batching it will ask you once. Otherwise it asks once per token; you can reject any of them, and the ones already done stay revoked.',
+      'If your wallet supports batching it will ask you once. Otherwise it asks once per token.',
+      'If you get interrupted, a Continue button finishes the rest for free — the fee is only ever charged once.',
     ],
     okText: `Pay & revoke ${items.length}`,
   });
   if (!ok) return;
+
+  // Remember where we started so the fee payment can be proven on-chain later.
+  let startBlock = 0;
+  try {
+    startBlock = Number(decodeUint(await rpc('eth_blockNumber', [])));
+  } catch {
+    /* verification just degrades to "not provable" */
+  }
 
   // --- fast path: one confirmation for the fee and every revoke ------------
   const calls = [];
@@ -937,9 +1094,12 @@ async function revokeBatch() {
     if (batchId) {
       toast(`Sent ${items.length} revokes as one batch — waiting…`);
       await waitForCalls(batchId);
-      // The wallet reports the batch, not per-call success. Re-scan so the
-      // table reflects real on-chain state rather than an assumption.
-      toast(`Batch complete — rechecking on-chain`);
+      // The wallet reports the batch, not each call. If the fee landed, keep a
+      // resumable record so a partial batch can be finished for free.
+      if (!feeContractReady || (await verifyBatchFeePaid(startBlock))) {
+        saveBatchSession(items);
+      }
+      toast('Batch complete — rechecking on-chain');
       refreshBurnStats();
       return startScan(state.viewing || state.account, false);
     }
@@ -955,6 +1115,36 @@ async function revokeBatch() {
     toast(walletError(e), 'err');
     return;
   }
+  // Fee is confirmed at this point, so the batch is now resumable for free.
+  saveBatchSession(items);
+
+  await runBatchRevokes(items);
+}
+
+/**
+ * Send one revoke per token, dropping each from the saved batch as it confirms.
+ * Shared by the first attempt and by Continue, so an interruption at any point
+ * leaves an accurate record of what is still owed.
+ */
+async function runBatchRevokes(items) {
+  // Try the single-prompt path first — Continue benefits from it too.
+  try {
+    const id = await trySendCalls(
+      items.map((i) => {
+        const c = revokeCalldata(i);
+        return { to: c.to, data: c.data, value: '0x0' };
+      })
+    );
+    if (id) {
+      toast(`Sent ${items.length} revokes as one batch — waiting…`);
+      await waitForCalls(id);
+      refreshBurnStats();
+      return startScan(state.viewing || state.account, false);
+    }
+  } catch (e) {
+    toast(walletError(e), 'err');
+    return;
+  }
 
   let done = 0;
   for (const item of items) {
@@ -965,6 +1155,7 @@ async function revokeBatch() {
       const rec = await waitForReceipt(hash);
       if (decodeUint(rec.status) !== 1n) throw new Error('reverted');
       done++;
+      markBatchItemDone(item.key);
       markRevoked(item, tr);
     } catch (e) {
       toast(`${item.meta?.symbol ?? 'token'}: ${walletError(e)}`, 'err');
@@ -973,6 +1164,7 @@ async function revokeBatch() {
     }
   }
   toast(`Revoked ${done} of ${items.length}`, done === items.length ? '' : 'warn');
+  renderResumeBar();
   refreshBurnStats();
 }
 
@@ -1114,6 +1306,12 @@ $('wm-disconnect').onclick = disconnectWallet;
 $('rescan').onclick = () => state.viewing && startScan(state.viewing, state.readOnly);
 $('only-risky').onchange = renderRows;
 $('revoke-batch').onclick = revokeBatch;
+$('resume-continue').onclick = continueBatch;
+$('resume-discard').onclick = () => {
+  clearBatchSession();
+  renderResumeBar();
+  toast('Batch discarded. The fee is not refundable.', 'warn');
+};
 $('do-burn').onclick = triggerBurn;
 
 const onSelectAll = (e) => {
